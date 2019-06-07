@@ -625,7 +625,6 @@ void pss_test()
 
 void main(void)
 {
-
 	//test_addsubmul();
 	//gmp_speed_test();
 	//test_sha256();
