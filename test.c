@@ -25,8 +25,6 @@ clock_t elapsed; float sec;
  printf("\n[%s: %.5f s]\n",qstr,sec);\
 }\
 
-
-#if 0
 // a,b,>=0, a>=b
 void test_sha256()
 {
@@ -184,8 +182,6 @@ void mpz_sub_new(mpz_t c, mpz_t a, mpz_t b)
 
 	}
 }
-
-#endif
 
 void mpz_mul_new(mpz_t c, mpz_t a, mpz_t b)
 {
@@ -541,7 +537,6 @@ void RSA_OAEP_test()
 
 	//decoing
 	//RSA_PKCS1_RSA2048_SHA256_OAEP_decode(TMP, &TMP_len, EM, EM_len, label, label_len);
-
 
 	START_WATCH;
 	for (int i = 0; i < 50; i++)  RSA_RSA2048_SHA256_OAEP_enc(EM, &EM_len, M, M_len, label, label_len, &pub);
