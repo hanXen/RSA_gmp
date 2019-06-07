@@ -27,6 +27,7 @@ clock_t elapsed; float sec;
 
 
 #if 0
+// a,b,>=0, a>=b
 void test_sha256()
 {
 	int i;
@@ -47,72 +48,102 @@ void test_sha256()
 
 }
 
-
 // a,b,>=0, a>=b
 void __mpz_add_new(mpz_t c, mpz_t a, mpz_t b)
 {
-	int   i,carry=0;
+	int   i, carry = 0;
 	mpz_t out;
 
-	mpz_init2(out,(mpz_size(a)+1)<<5);
+	mpz_init2(out, (mpz_size(a) + 1) << 5);
 
-	for (i=0;i<mpz_size(b);i++)
+	for (i = 0; i < mpz_size(b); i++)
 	{
-		if (carry)	{
+		if (carry) {
 			out->_mp_d[i] = a->_mp_d[i] + b->_mp_d[i] + 1;
-			carry         = a->_mp_d[i] >= (~b->_mp_d[i]);
+			carry = a->_mp_d[i] >= (~b->_mp_d[i]);
 		}
 		else {
 			out->_mp_d[i] = a->_mp_d[i] + b->_mp_d[i];
-			carry         = out->_mp_d[i] < a->_mp_d[i];
-		}		
+			carry = out->_mp_d[i] < a->_mp_d[i];
+		}
 	}
 
-	for (; i < mpz_size(a); i++) 
+	for (; i < mpz_size(a); i++)
 	{
 		out->_mp_d[i] = a->_mp_d[i] + carry;
-		carry         = out->_mp_d[i] < carry;
+		carry = out->_mp_d[i] < carry;
 	}
 
-	if(carry) {
+	if (carry) {
 		out->_mp_d[i] = 1;
 		out->_mp_size = mpz_size(a) + 1;
-	}else
+	}
+	else
 		out->_mp_size = mpz_size(a);
 
 	mpz_set(c, out);
-
 	mpz_clear(out);
 }
 
 // a,b,>=0, a>=b
 void __mpz_sub_new(mpz_t c, mpz_t a, mpz_t b)
 {
+	int i, borrow = 0, tmp;
+	mpz_t out;
 
+	mpz_init2(out, (mpz_size(a) + 1) << 5);
+
+	for (i = 0; i < mpz_size(b); i++)
+	{
+		out->_mp_d[i] = a->_mp_d[i] - b->_mp_d[i] - borrow;
+		if (borrow) {
+			borrow = (a->_mp_d[i] <= b->_mp_d[i]);
+		}
+		else {
+			borrow = (a->_mp_d[i] < b->_mp_d[i]);
+		}
+	}
+	for (; i < mpz_size(a); i++) {
+		out->_mp_d[i] = a->_mp_d[i] - borrow;
+		borrow = (a->_mp_d[i] < borrow);
+	}
+
+	out->_mp_size = mpz_size(a);
+	for (i = out->_mp_size - 1; i >= 0; i--) {
+		if (out->_mp_d[i] == 0) out->_mp_size--;
+		else break;
+	}
+
+	mpz_set(c, out);
+	mpz_clear(out);
 }
+
 
 // a,b, in Z
 void mpz_add_new(mpz_t c, mpz_t a, mpz_t b)
 {
-	if (mpz_sgn(a)==mpz_sgn(b)) {
+	if (mpz_sgn(a) == mpz_sgn(b)) {
 		//부호가 같은 경우
 		if (mpz_size(a) >= mpz_size(b)) {
 			__mpz_add_new(c, a, b);
 			c->_mp_size = c->_mp_size*mpz_sgn(a);
-		}else {
+		}
+		else {
 			__mpz_add_new(c, b, a);
 			c->_mp_size = c->_mp_size*mpz_sgn(a);
 		}
 	}
 	else {
 		//부호가 다른 경우
-		if (mpz_cmpabs(a,b)>=0) {
-			__mpz_sub_new(c,a,b);
+
+		if (mpz_cmpabs(a, b) >= 0)
+		{
+			__mpz_sub_new(c, a, b);
 			c->_mp_size = c->_mp_size*mpz_sgn(a);
 		}
 		else {
 			__mpz_sub_new(c, b, a);
-			c->_mp_size = c->_mp_size*mpz_sgn(b);			
+			c->_mp_size = c->_mp_size*mpz_sgn(b);
 		}
 	}
 
@@ -122,58 +153,39 @@ void mpz_add_new(mpz_t c, mpz_t a, mpz_t b)
 // a,b, in Z
 void mpz_sub_new(mpz_t c, mpz_t a, mpz_t b)
 {
+	if (a->_mp_size == 0) {
+		mpz_set(c, b);
+		c->_mp_size = c->_mp_size*(-1);
+		return;
+	}
 
-}
-
-void test_add_sub()
-{
-	int             i;
-	mpz_t           a, b, c, d;
-	gmp_randstate_t state;
-
-	mpz_init(a); mpz_init(b); mpz_init(c); mpz_init(d);
-	gmp_randinit_default(state);
-
-	for (i = 0; i < 1000000; i++) {
-		mpz_urandomb(a, state, 1024);
-		a->_mp_size = a->_mp_d[0] & 0x1f;
-		a->_mp_size = (a->_mp_d[0] & 0x1) ? (a->_mp_size) : (a->_mp_size *(-1));
-
-		mpz_urandomb(b, state, 1024);
-		b->_mp_size = b->_mp_d[0] & 0x1f;
-		b->_mp_size = (b->_mp_d[0] & 0x1) ? (b->_mp_size) : (b->_mp_size *(-1));
-
-		mpz_add(c, a, b);
-		mpz_add_new(d, a, b);
-
-		if (mpz_cmp(c, d)) {
-			printf("flase1\n");
-			mpz_add(c, a, b);
-			mpz_add_new(d, a, b);
-
+	if (mpz_sgn(a) == mpz_sgn(b)) {
+		//부호가 같은 경우
+		if (mpz_cmpabs(a, b) >= 0)
+		{
+			__mpz_sub_new(c, a, b);
+			c->_mp_size = c->_mp_size*mpz_sgn(a);
 		}
 		else {
-			printf("true\n");
-		}
-
-		mpz_sub(c, a, b);
-		mpz_sub_new(d, a, b);
-
-		if (mpz_cmp(c, d)) {
-			printf("flase2\n");
-		}
-		else {
-			printf("true\n");
+			__mpz_sub_new(c, b, a);
+			c->_mp_size = c->_mp_size*(0 - mpz_sgn(b));
 		}
 	}
-	
-	mpz_clear(a); mpz_clear(b); mpz_clear(c); mpz_clear(d);
-	gmp_randclear(state);
+	else {
+		//부호가 다른 경우
+		if (mpz_size(a) >= mpz_size(b)) {
+			__mpz_add_new(c, a, b);
+			c->_mp_size = c->_mp_size*mpz_sgn(a);
+		}
+		else {
+			__mpz_add_new(c, b, a);
+			c->_mp_size = c->_mp_size*mpz_sgn(a);
+		}
+
+	}
 }
 
 #endif
-
-
 
 void mpz_mul_new(mpz_t c, mpz_t a, mpz_t b)
 {
@@ -187,11 +199,9 @@ void mpz_mul_new(mpz_t c, mpz_t a, mpz_t b)
 
 	mpz_init2(out,((a_size+b_size)<<5)+1);
 	for (i = 0; i < out->_mp_alloc; i++) out->_mp_d[i] = 0;
-
 	for (i = 0; i < b_size; i++) {
 		carry = 0;
 		for (j = 0; j < a_size; j++) {
-
 			carry = (unsigned long long int)(b->_mp_d[i]) * (unsigned long long int)(a->_mp_d[j])
 				  + (unsigned long long int)out->_mp_d[i + j]
 				  + ((unsigned long long int)carry>>32);
@@ -199,11 +209,9 @@ void mpz_mul_new(mpz_t c, mpz_t a, mpz_t b)
 		}
 		out->_mp_d[i + j] = (unsigned int)((unsigned long long int)carry >> 32);
 	}
-
 	out->_mp_size = (a_size + b_size);
 	if (out->_mp_d[out->_mp_size - 1] == 0) out->_mp_size--;
 	out->_mp_size = out->_mp_size*mpz_sgn(a)*mpz_sgn(b);
-
 
 	mpz_set(c, out);
 	mpz_clear(out);
@@ -229,154 +237,157 @@ int mpz_ltor_binary_powm(mpz_t c, mpz_t a, mpz_t e, mpz_t n)
 			}
 		}
 	}
-
 	mpz_set(c, out);
 	mpz_clear(out);
 }
-
 void gmp_speed_test()
 {
-	int i;
-	mpz_t a, b, c, d, e;
+	mpz_t a, b, c, d;
 	gmp_randstate_t state;
+	int i;
 
 	mpz_init(a);
 	mpz_init(b);
 	mpz_init(c);
 	mpz_init(d);
-	mpz_init(e);
 	gmp_randinit_default(state);
 
-	mpz_urandomb(a,state, 2048);
-	mpz_urandomb(b,state, 2048);
-	while (1) {
-		START_WATCH;
-		for (i = 0; i < 200000; i++) mpz_add(c, a, b);
-		STOP_WATCH;
-		PRINT_TIME("mpz_add");
+	mpz_urandomb(a, state, 2048);
+	mpz_urandomb(b, state, 2048);
+	mpz_urandomb(c, state, 4096);
 
-		START_WATCH;
-		for (i = 0; i < 200000; i++) mpz_sub(c, a, b);
-		STOP_WATCH;
-		PRINT_TIME("mpz_sub");
+	START_WATCH;
+	for (i = 0; i < 1000000; i++) mpz_add(d, a, b);
+	STOP_WATCH;
+	PRINT_TIME("mpz_add");
 
-		
-		START_WATCH;
-		for (i = 0; i < 200000; i++) {
-			mpz_urandomb(a, state, 2048);
-			mpz_urandomb(b, state, 2048);
-			mpz_mul(c, a, b);
-		}
-		STOP_WATCH;
-		PRINT_TIME("mpz_mul");
+	START_WATCH;
+	for (i = 0; i < 1000000; i++) mpz_sub(d, a, b);
+	STOP_WATCH;
+	PRINT_TIME("mpz_sub");
 
-	//	mpz_urandomb(a, state, 2048);
-	//	mpz_urandomb(b, state, 2048);
-		START_WATCH;
-		for (i = 0; i < 200000; i++) {
-			mpz_urandomb(a, state, 2048);
-			mpz_urandomb(b, state, 2048);
-			mpz_mul_new(c, a, b);
-		}
-		STOP_WATCH;
-		PRINT_TIME("mpz_mul_new");
+	START_WATCH;
+	for (i = 0; i < 1000000; i++) mpz_mul(d, a, b);
+	STOP_WATCH;
+	PRINT_TIME("mpz_mul");
 
-		gmp_printf("mul %Zx\n",c);
-		gmp_printf("new %Zx\n", d);
+	START_WATCH;
+	for (i = 0; i < 1000000; i++) mpz_mod(d, c, b);
+	STOP_WATCH;
+	PRINT_TIME("mpz_mod");
 
-	}
+	START_WATCH;
+	for (i = 0; i < 1000000; i++) mpz_invert(d, a, b);
+	STOP_WATCH;
+	PRINT_TIME("mpz_invert");
 
-	mpz_clear(a);
-	mpz_clear(b);
-	mpz_clear(c);
-	mpz_clear(d);
-	mpz_clear(e);
-	gmp_randclear(state);
-
+	mpz_clear(a); mpz_clear(b); mpz_clear(c); mpz_clear(d);
 }
 
-
-void test_addsubmul()
+void test_add_sub()
 {
 	int i;
-	mpz_t a, b, c, d, e;
+	mpz_t a, b, c, d;
 	gmp_randstate_t state;
 
-	mpz_init(a);
-	mpz_init(b);
-	mpz_init(c);
-	mpz_init(d);
-	mpz_init(e);
+	mpz_init(a); mpz_init(b); mpz_init(c); mpz_init(d);
 	gmp_randinit_default(state);
 
-	for (i = 0; i < 10000; i++) {
-		mpz_urandomb(a, state, 2048);
-		mpz_urandomb(b, state, 2048);
+	for (i = 0; i < 100000; i++)
+	{
+		mpz_urandomb(a, state, 1024);
+		a->_mp_size = a->_mp_d[0] & 0x1f;
+		a->_mp_size = (a->_mp_d[0] & 0x1) ? (a->_mp_size) : (a->_mp_size *(-1));
+		mpz_urandomb(b, state, 1024);
+		b->_mp_size = a->_mp_d[0] & 0x1f;
+		b->_mp_size = (b->_mp_d[0] & 0x1) ? (b->_mp_size) : (b->_mp_size *(-1));
+		mpz_add(c, a, b);
+		mpz_add_new(d, a, b);
 
-	//	b->_mp_d[0] = 0xf;
-	//	b->_mp_d[1] = 0xf;
-	//	a->_mp_size = 1;
-	//	b->_mp_size = 2;
-		
-		mpz_mul(c, a, b);
-		mpz_mul_new(d, a, b);
-		if (mpz_cmp(c, d) != 0) {
-			
-			gmp_printf("a=%Zx\n", a);
-			gmp_printf("b=%Zx\n", b);
-			gmp_printf("c=%Zx\n", c);
-			gmp_printf("d=%Zx\n", d);
-
-			mpz_mul(c, a, b);
-			mpz_mul_new(d, a, b);
-
-
-
+		if (mpz_cmp(c, d)) {
+			printf("false\n");
+		}
+		else {
+			printf("true\n");
 		}
 	}
-	
-	return 0;
+	for (i = 0; i < 1000000; i++)
+	{
+		mpz_urandomb(a, state, 1024);
+		a->_mp_size = a->_mp_d[0] & 0x1f;
+		a->_mp_size = (a->_mp_d[0] & 0x1) ? (a->_mp_size) : (a->_mp_size *(-1));
+		mpz_urandomb(b, state, 1024);
+		b->_mp_size = a->_mp_d[0] & 0x1f;
+		b->_mp_size = (b->_mp_d[0] & 0x1) ? (b->_mp_size) : (b->_mp_size *(-1));
 
+		mpz_sub(c, a, b);
+		mpz_sub_new(d, a, b);
+
+		if (mpz_cmp(c, d)) {
+			printf("false\n");
+		}
+		else {
+			printf("true\n");
+		}
+	}
+
+	mpz_clear(a); mpz_clear(b); mpz_clear(c); mpz_clear(d);
+	gmp_randclear(state);
 }
-
 
 void test_powm()
 {
 	int i;
-	mpz_t a, b, c, n, e;
+	mpz_t c, a, e, n, d;
 	gmp_randstate_t state;
 
-	mpz_init(a);
-	mpz_init(b);
-	mpz_init(c);
-	mpz_init(n);
-	mpz_init(e);
+	mpz_init(c); mpz_init(a); mpz_init(e); mpz_init(n); mpz_init(d);
 	gmp_randinit_default(state);
 
 	mpz_urandomb(n, state, 2048);
-	for (i = 0; i < 10; i++) {
-		mpz_urandomm(a, state, n);
-		mpz_urandomm(e, state, n);
-		mpz_powm(b, a, e, n);
+	for (i = 0; i < 100; i++) {
+		mpz_urandomb(a, state, 2048);
+		mpz_urandomb(e, state, 2048);
+
 		mpz_ltor_binary_powm(c, a, e, n);
-		if (mpz_cmp(b, c)) {
-			printf("error\n");
+		mpz_powm(d, a, e, n);
+		if (mpz_cmp(c, d)) {
+			printf("false\n");
 		}
 		else {
+			printf("true\n");
 		}
 	}
 
-	START_WATCH;
-	mpz_powm(b, a, e, n);
-	STOP_WATCH;
-	PRINT_TIME("sliding window");
+	mpz_clear(c); mpz_clear(a); mpz_clear(e); mpz_clear(n); mpz_clear(d);
+	gmp_randclear(state);
+}
+
+void gmp_powm_speed_test()
+{
+	int i;
+	mpz_t c, a, e, n, d;
+	gmp_randstate_t state;
+
+	mpz_init(c); mpz_init(a); mpz_init(e); mpz_init(n); mpz_init(d);
+	gmp_randinit_default(state);
+
+	mpz_urandomb(a, state, 2048);
+	mpz_urandomb(n, state, 2048);
+	mpz_urandomb(e, state, 2048);
 
 	START_WATCH;
-	mpz_ltor_binary_powm(c, a, e, n);
+	for (i = 0; i < 100; i++) mpz_powm(d, a, e, n);
 	STOP_WATCH;
-	PRINT_TIME("binary");
-	getchar();
+	PRINT_TIME("mpz_powm");
 
+	START_WATCH;
+	for (i = 0; i < 100; i++) mpz_ltor_binary_powm(c, a, e, n);
+	STOP_WATCH;
+	PRINT_TIME("mpz_ltor_binary_powm");
+
+	mpz_clear(c); mpz_clear(a); mpz_clear(e); mpz_clear(n); mpz_clear(d);
+	gmp_randclear(state);
 }
 
 test_rsa_keygen()
@@ -411,13 +422,10 @@ test_rsa_keygen()
 	gmp_printf("n = %Zx\n", pri.n);
 	gmp_printf("e = %Zx\n", pri.e);
 	gmp_printf("d = %Zx\n\n", pri.d);
-
 	gmp_printf("e = %Zx\n", pub.e);
 	gmp_printf("n = %Zx\n\n", pub.n);
-
 	gmp_printf("m  = %Zx\n", m);
 	gmp_printf("c = %Zx\n", c);
-
 	gmp_printf("mp = %Zx\n", mp);
 
 	RSA_KEY_clear(&pub,&pri);
@@ -426,7 +434,6 @@ test_rsa_keygen()
 	mpz_clear(m); mpz_clear(mp); mpz_clear(c);
 
 }
-
 
 void test_enc_dec_primitive_test()
 {
@@ -452,7 +459,6 @@ void test_enc_dec_primitive_test()
 	gmp_printf("dp = %Zx\n\n", pri.dp);
 	gmp_printf("dq = %Zx\n\n", pri.dq);
 	gmp_printf("qinv = %Zx\n\n", pri.qinv);
-
 	gmp_printf("e = %Zx\n", pub.e);
 	gmp_printf("n = %Zx\n\n", pub.n);
 
@@ -472,9 +478,7 @@ void test_enc_dec_primitive_test()
 
 	gmp_printf("m  = %Zx\n", m);
 	gmp_printf("c = %Zx\n", c);
-
 	gmp_printf("mp = %Zx\n", mp);
-
 
 	START_WATCH;
 	for(i=0;i<50;i++) RSA_enc_primitive(c, m, &pub);
@@ -488,8 +492,6 @@ void test_enc_dec_primitive_test()
 
 	pub.e->_mp_d[0] = pri.e->_mp_d[1] = 0x10003;
 #undef USE_CRT
-
-
 	START_WATCH;
 	for (i = 0; i<50; i++) RSA_enc_primitive(c, m, &pub);
 	STOP_WATCH;
@@ -506,8 +508,6 @@ void test_enc_dec_primitive_test()
 
 	gmp_randclear(state);
 	mpz_clear(m); mpz_clear(mp); mpz_clear(c); mpz_clear(mm);
-
-
 }
 
 void RSA_OAEP_test()
